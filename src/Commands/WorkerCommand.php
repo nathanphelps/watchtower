@@ -1,0 +1,241 @@
+<?php
+
+namespace NathanPhelps\Watchtower\Commands;
+
+use Illuminate\Console\Command;
+use Illuminate\Contracts\Queue\Factory as QueueFactory;
+use Illuminate\Queue\Worker;
+use Illuminate\Queue\WorkerOptions;
+use Illuminate\Support\Facades\Redis;
+use NathanPhelps\Watchtower\Models\Worker as WorkerModel;
+
+class WorkerCommand extends Command
+{
+    /**
+     * The name and signature of the console command.
+     */
+    protected $signature = 'watchtower:worker
+                            {queue=default : The queue to process}
+                            {--worker-id= : The unique worker ID}
+                            {--tries=3 : Number of times to attempt a job before logging it failed}
+                            {--timeout=60 : The number of seconds a child process can run}
+                            {--memory=128 : The memory limit in megabytes}
+                            {--sleep=3 : Number of seconds to sleep when no job is available}
+                            {--rest=0 : Number of seconds to rest between jobs}';
+
+    /**
+     * The console command description.
+     */
+    protected $description = 'Start a Watchtower queue worker with polling-based control';
+
+    /**
+     * The worker ID for this instance.
+     */
+    protected string $workerId;
+
+    /**
+     * Whether the worker is paused.
+     */
+    protected bool $paused = false;
+
+    /**
+     * Whether the worker should stop.
+     */
+    protected bool $shouldStop = false;
+
+    /**
+     * Execute the console command.
+     */
+    public function handle(QueueFactory $queue, Worker $worker): int
+    {
+        $this->workerId = $this->option('worker-id') ?? $this->generateWorkerId();
+        $connection = config('watchtower.supervisors.default.connection', 'redis');
+        $queueName = $this->argument('queue');
+
+        $this->info("Starting Watchtower worker [{$this->workerId}] on queue [{$queueName}]");
+
+        // Register this worker if not already registered
+        $this->registerWorker($queueName);
+
+        // Build worker options
+        $options = $this->buildWorkerOptions();
+
+        // Main worker loop with polling-based control
+        while (! $this->shouldStop) {
+            // Check for control commands
+            $this->checkForCommands();
+
+            if ($this->paused) {
+                $this->waitWhilePaused();
+                continue;
+            }
+
+            // Send heartbeat
+            $this->sendHeartbeat();
+
+            // Process the next job
+            try {
+                $worker->runNextJob(
+                    $connection,
+                    $queueName,
+                    $options
+                );
+            } catch (\Throwable $e) {
+                $this->error("Error processing job: {$e->getMessage()}");
+                report($e);
+            }
+
+            // Check memory limit
+            if ($this->memoryExceeded($options->memory)) {
+                $this->info('Memory limit exceeded, stopping worker...');
+                $this->shouldStop = true;
+            }
+        }
+
+        $this->gracefulShutdown();
+
+        return Command::SUCCESS;
+    }
+
+    /**
+     * Register this worker in the database.
+     */
+    protected function registerWorker(string $queue): void
+    {
+        WorkerModel::updateOrCreate(
+            ['worker_id' => $this->workerId],
+            [
+                'supervisor' => 'default',
+                'queue' => $queue,
+                'pid' => getmypid(),
+                'status' => WorkerModel::STATUS_RUNNING,
+                'started_at' => now(),
+                'last_heartbeat' => now(),
+            ]
+        );
+    }
+
+    /**
+     * Check Redis for control commands.
+     */
+    protected function checkForCommands(): void
+    {
+        $key = $this->getCommandKey();
+        $connection = config('watchtower.redis_connection', 'default');
+        $command = Redis::connection($connection)->get($key);
+
+        if (! $command) {
+            return;
+        }
+
+        // Clear the command
+        Redis::connection($connection)->del($key);
+
+        switch ($command) {
+            case 'stop':
+                $this->info('Received stop command');
+                $this->shouldStop = true;
+                break;
+
+            case 'pause':
+                $this->info('Received pause command');
+                $this->paused = true;
+                WorkerModel::where('worker_id', $this->workerId)->update([
+                    'status' => WorkerModel::STATUS_PAUSED,
+                ]);
+                break;
+
+            case 'resume':
+                $this->info('Received resume command');
+                $this->paused = false;
+                WorkerModel::where('worker_id', $this->workerId)->update([
+                    'status' => WorkerModel::STATUS_RUNNING,
+                ]);
+                break;
+        }
+    }
+
+    /**
+     * Wait while the worker is paused.
+     */
+    protected function waitWhilePaused(): void
+    {
+        $pollInterval = config('watchtower.worker_poll_interval', 3);
+
+        while ($this->paused && ! $this->shouldStop) {
+            sleep($pollInterval);
+            $this->checkForCommands();
+            $this->sendHeartbeat();
+        }
+    }
+
+    /**
+     * Send a heartbeat to indicate the worker is alive.
+     */
+    protected function sendHeartbeat(): void
+    {
+        WorkerModel::where('worker_id', $this->workerId)->update([
+            'last_heartbeat' => now(),
+        ]);
+    }
+
+    /**
+     * Get the Redis command key for this worker.
+     */
+    protected function getCommandKey(): string
+    {
+        return "watchtower:worker:{$this->workerId}:command";
+    }
+
+    /**
+     * Build the worker options from command arguments.
+     */
+    protected function buildWorkerOptions(): WorkerOptions
+    {
+        return new WorkerOptions(
+            name: 'watchtower',
+            backoff: 0,
+            memory: (int) $this->option('memory'),
+            timeout: (int) $this->option('timeout'),
+            sleep: (int) $this->option('sleep'),
+            maxTries: (int) $this->option('tries'),
+            force: false,
+            stopWhenEmpty: false,
+            maxJobs: 0,
+            maxTime: 0,
+            rest: (int) $this->option('rest'),
+        );
+    }
+
+    /**
+     * Generate a unique worker ID.
+     */
+    protected function generateWorkerId(): string
+    {
+        return \Illuminate\Support\Str::uuid()->toString();
+    }
+
+    /**
+     * Check if memory has been exceeded.
+     */
+    protected function memoryExceeded(int $memoryLimit): bool
+    {
+        return (memory_get_usage(true) / 1024 / 1024) >= $memoryLimit;
+    }
+
+    /**
+     * Perform a graceful shutdown.
+     */
+    protected function gracefulShutdown(): void
+    {
+        $this->info("Shutting down worker [{$this->workerId}]");
+
+        WorkerModel::where('worker_id', $this->workerId)->update([
+            'status' => WorkerModel::STATUS_STOPPED,
+        ]);
+
+        // Clear any pending commands
+        $connection = config('watchtower.redis_connection', 'default');
+        Redis::connection($connection)->del($this->getCommandKey());
+    }
+}

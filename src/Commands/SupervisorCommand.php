@@ -1,0 +1,150 @@
+<?php
+
+namespace NathanPhelps\Watchtower\Commands;
+
+use Illuminate\Console\Command;
+use NathanPhelps\Watchtower\Models\Worker;
+use NathanPhelps\Watchtower\Services\WorkerManager;
+
+class SupervisorCommand extends Command
+{
+    /**
+     * The name and signature of the console command.
+     */
+    protected $signature = 'watchtower:supervisor
+                            {--supervisor=default : The supervisor configuration to use}';
+
+    /**
+     * The console command description.
+     */
+    protected $description = 'Start the Watchtower supervisor to manage queue workers';
+
+    /**
+     * Whether the supervisor should continue running.
+     */
+    protected bool $running = true;
+
+    /**
+     * Execute the console command.
+     */
+    public function handle(WorkerManager $workerManager): int
+    {
+        $supervisorName = $this->option('supervisor');
+        $config = config("watchtower.supervisors.{$supervisorName}");
+
+        if (! $config) {
+            $this->error("Supervisor configuration '{$supervisorName}' not found.");
+
+            return Command::FAILURE;
+        }
+
+        $this->info("Starting Watchtower supervisor [{$supervisorName}]");
+        $this->info("Queue: ".implode(', ', (array) $config['queue']));
+        $this->info("Min processes: {$config['min_processes']}, Max processes: {$config['max_processes']}");
+
+        // Main supervisor loop
+        while ($this->running) {
+            try {
+                $this->supervise($workerManager, $supervisorName, $config);
+            } catch (\Throwable $e) {
+                $this->error("Supervisor error: {$e->getMessage()}");
+                report($e);
+            }
+
+            // Poll interval
+            sleep(config('watchtower.worker_poll_interval', 3));
+        }
+
+        $this->info('Supervisor shutting down...');
+        $workerManager->terminateAllWorkers();
+
+        return Command::SUCCESS;
+    }
+
+    /**
+     * Main supervision logic.
+     */
+    protected function supervise(WorkerManager $workerManager, string $supervisorName, array $config): void
+    {
+        $queues = (array) $config['queue'];
+
+        // Clean up stale workers
+        $staleCount = $workerManager->cleanupStaleWorkers();
+        if ($staleCount > 0) {
+            $this->warn("Cleaned up {$staleCount} stale worker(s)");
+        }
+
+        // Get current running workers for this supervisor
+        $runningWorkers = Worker::forSupervisor($supervisorName)
+            ->whereIn('status', [Worker::STATUS_RUNNING, Worker::STATUS_PAUSED])
+            ->get();
+
+        $currentCount = $runningWorkers->count();
+        $minProcesses = $config['min_processes'];
+        $maxProcesses = $config['max_processes'];
+
+        // Scale up if below minimum
+        if ($currentCount < $minProcesses) {
+            $toStart = $minProcesses - $currentCount;
+            $this->info("Starting {$toStart} worker(s) to meet minimum");
+
+            for ($i = 0; $i < $toStart; $i++) {
+                $queue = $this->getNextQueue($queues, $i);
+                $workerId = $workerManager->startWorker($queue, [
+                    'supervisor' => $supervisorName,
+                    'tries' => $config['tries'] ?? 3,
+                    'timeout' => $config['timeout'] ?? 60,
+                    'memory' => $config['memory'] ?? 128,
+                    'sleep' => $config['sleep'] ?? 3,
+                ]);
+                $this->info("Started worker [{$workerId}] on queue [{$queue}]");
+            }
+        }
+
+        // Verify workers are still alive
+        foreach ($runningWorkers as $worker) {
+            if (! $workerManager->isWorkerRunning($worker->worker_id)) {
+                $this->warn("Worker [{$worker->worker_id}] is no longer running, marking as stopped");
+                $worker->update(['status' => Worker::STATUS_STOPPED]);
+
+                // Restart if we're below minimum
+                if ($runningWorkers->count() <= $minProcesses) {
+                    $queue = $worker->queue;
+                    $newWorkerId = $workerManager->startWorker($queue, [
+                        'supervisor' => $supervisorName,
+                        'tries' => $config['tries'] ?? 3,
+                        'timeout' => $config['timeout'] ?? 60,
+                        'memory' => $config['memory'] ?? 128,
+                        'sleep' => $config['sleep'] ?? 3,
+                    ]);
+                    $this->info("Restarted worker [{$newWorkerId}] on queue [{$queue}]");
+                }
+            }
+        }
+
+        // Output status periodically
+        $this->outputStatus($supervisorName, $runningWorkers->count());
+    }
+
+    /**
+     * Get the next queue to assign a worker to (round-robin).
+     */
+    protected function getNextQueue(array $queues, int $index): string
+    {
+        return $queues[$index % count($queues)];
+    }
+
+    /**
+     * Output current status.
+     */
+    protected function outputStatus(string $supervisor, int $workerCount): void
+    {
+        static $lastOutput = 0;
+
+        // Only output every 30 seconds
+        if (time() - $lastOutput >= 30) {
+            $this->info("[{$supervisor}] Active workers: {$workerCount}");
+            $lastOutput = time();
+        }
+    }
+}

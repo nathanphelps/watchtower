@@ -9,8 +9,14 @@ use Illuminate\Queue\Events\JobQueued;
 use Illuminate\Queue\Events\JobRetryRequested;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use NathanPhelps\Watchtower\Commands\PruneJobsCommand;
+use NathanPhelps\Watchtower\Commands\SupervisorCommand;
+use NathanPhelps\Watchtower\Commands\WorkerCommand;
 use NathanPhelps\Watchtower\Services\JobMonitor;
+use NathanPhelps\Watchtower\Services\MetricsCollector;
+use NathanPhelps\Watchtower\Services\WorkerManager;
 
 class WatchtowerServiceProvider extends ServiceProvider
 {
@@ -22,6 +28,9 @@ class WatchtowerServiceProvider extends ServiceProvider
         $this->registerPublishing();
         $this->registerMigrations();
         $this->registerGate();
+        $this->registerRoutes();
+        $this->registerViews();
+        $this->registerCommands();
         $this->registerEventListeners();
     }
 
@@ -36,6 +45,8 @@ class WatchtowerServiceProvider extends ServiceProvider
         );
 
         $this->app->singleton(JobMonitor::class);
+        $this->app->singleton(WorkerManager::class);
+        $this->app->singleton(MetricsCollector::class);
     }
 
     /**
@@ -51,6 +62,14 @@ class WatchtowerServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/../database/migrations' => database_path('migrations'),
             ], 'watchtower-migrations');
+
+            $this->publishes([
+                __DIR__.'/../resources/views' => resource_path('views/vendor/watchtower'),
+            ], 'watchtower-views');
+
+            $this->publishes([
+                __DIR__.'/../public' => public_path('vendor/watchtower'),
+            ], 'watchtower-assets');
         }
     }
 
@@ -78,6 +97,53 @@ class WatchtowerServiceProvider extends ServiceProvider
             // In production, require explicit gate definition
             return false;
         });
+    }
+
+    /**
+     * Register the package routes.
+     */
+    protected function registerRoutes(): void
+    {
+        Route::group($this->routeConfiguration(), function () {
+            $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
+        });
+    }
+
+    /**
+     * Get the route group configuration.
+     */
+    protected function routeConfiguration(): array
+    {
+        return [
+            'prefix' => config('watchtower.path', 'watchtower'),
+            'middleware' => array_merge(
+                config('watchtower.middleware', ['web']),
+                ['watchtower']
+            ),
+            'as' => 'watchtower.',
+        ];
+    }
+
+    /**
+     * Register the package views.
+     */
+    protected function registerViews(): void
+    {
+        $this->loadViewsFrom(__DIR__.'/../resources/views', 'watchtower');
+    }
+
+    /**
+     * Register the package commands.
+     */
+    protected function registerCommands(): void
+    {
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                WorkerCommand::class,
+                SupervisorCommand::class,
+                PruneJobsCommand::class,
+            ]);
+        }
     }
 
     /**

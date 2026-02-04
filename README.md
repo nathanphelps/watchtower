@@ -1,30 +1,24 @@
 # Watchtower
 
-[![Latest Version on Packagist](https://img.shields.io/packagist/v/nathanphelps/watchtower.svg?style=flat-square)](https://packagist.org/packages/nathanphelps/watchtower)
-[![Total Downloads](https://img.shields.io/packagist/dt/nathanphelps/watchtower.svg?style=flat-square)](https://packagist.org/packages/nathanphelps/watchtower)
+**Cross-platform Laravel queue monitoring and worker management dashboard**
 
-Cross-platform Laravel queue monitoring and worker management. Like Horizon, but works on Windows, Linux, and macOS.
+Watchtower provides queue monitoring and worker management capabilities similar to Laravel Horizon, but with full cross-platform support including Windows. Unlike Horizon, which relies on PCNTL signals (Unix-only), Watchtower uses a polling-based approach for worker control that works on Windows, Linux, and macOS.
 
 ## Features
 
-- 🖥️ **Cross-Platform** - Works on Windows, Linux, and macOS (no PCNTL dependency)
-- 📊 **Queue Monitoring Dashboard** - Real-time job tracking and metrics
-- ⚙️ **Worker Management** - Start, stop, pause, resume workers from the dashboard
-- 🎯 **Manual Scaling** - Adjust worker count on the fly
-- 📝 **Job Tracking** - Monitor job status, payload, exceptions, and retries
-- 🔄 **Failed Job Management** - Retry failed jobs from the dashboard
-- ⏱️ **Configurable Retention** - Automatic pruning of old job records
-- 🎨 **Modern UI** - Built with Inertia.js + Vue.js
-
-## Why Watchtower?
-
-Laravel Horizon is excellent but relies on PCNTL signals which don't work on Windows. Watchtower uses a polling-based approach for worker control, making it fully cross-platform while maintaining similar functionality.
+- 📊 **Queue Monitoring Dashboard** - Real-time job tracking, status monitoring, and metrics
+- ⚙️ **Worker Management** - Start, stop, pause, resume workers from the web UI
+- 🖥️ **Cross-Platform** - Works on Windows, Linux, and macOS
+- 📋 **Job Tracking** - Job status, payload, exceptions, retries, worker info
+- 🎨 **Modern UI** - Inertia.js + Vue.js dark-themed SPA interface
+- 🗑️ **Automatic Cleanup** - Time-based pruning of old job records
 
 ## Requirements
 
 - PHP 8.2+
-- Laravel 11.x or 12.x
-- Redis
+- Laravel 11 or 12
+- Redis (for worker control commands)
+- Node.js 18+ (for building assets)
 
 ## Installation
 
@@ -32,26 +26,78 @@ Laravel Horizon is excellent but relies on PCNTL signals which don't work on Win
 composer require nathanphelps/watchtower
 ```
 
-Publish the configuration and migrations:
+Publish the configuration and assets:
 
 ```bash
-php artisan vendor:publish --tag="watchtower-config"
-php artisan vendor:publish --tag="watchtower-migrations"
-```
-
-Run the migrations:
-
-```bash
+php artisan vendor:publish --tag=watchtower-config
+php artisan vendor:publish --tag=watchtower-migrations
 php artisan migrate
 ```
 
 ## Configuration
 
-Configure access control in your `AuthServiceProvider`:
+The package configuration is published to `config/watchtower.php`:
 
 ```php
-use Illuminate\Support\Facades\Gate;
+return [
+    // Dashboard URL path
+    'path' => env('WATCHTOWER_PATH', 'watchtower'),
 
+    // Route middleware
+    'middleware' => ['web'],
+
+    // Authorization gate
+    'gate' => env('WATCHTOWER_GATE', 'viewWatchtower'),
+
+    // Job retention (days)
+    'retention' => [
+        'completed' => 7,
+        'failed' => 30,
+    ],
+
+    // Supervisor configuration
+    'supervisors' => [
+        'default' => [
+            'connection' => 'redis',
+            'queue' => ['default'],
+            'min_processes' => 1,
+            'max_processes' => 10,
+            'tries' => 3,
+            'timeout' => 60,
+        ],
+    ],
+];
+```
+
+## Usage
+
+### Starting the Supervisor
+
+Run the supervisor to automatically manage your queue workers:
+
+```bash
+php artisan watchtower:supervisor
+```
+
+The supervisor will:
+
+- Maintain the minimum number of workers
+- Restart failed workers automatically
+- Monitor worker health via heartbeats
+
+### Manual Worker Control
+
+Start a single worker manually:
+
+```bash
+php artisan watchtower:worker default
+```
+
+### Accessing the Dashboard
+
+Visit `/watchtower` in your browser. By default, the dashboard is only accessible in local environments. Configure the gate in your `AuthServiceProvider` for production:
+
+```php
 Gate::define('viewWatchtower', function ($user) {
     return in_array($user->email, [
         'admin@example.com',
@@ -59,43 +105,48 @@ Gate::define('viewWatchtower', function ($user) {
 });
 ```
 
-## Usage
+### Pruning Old Jobs
 
-Start the supervisor to manage workers:
-
-```bash
-php artisan watchtower:supervisor
-```
-
-Access the dashboard at `/watchtower` (configurable in config file).
-
-## Documentation
-
-See the [design document](docs/plans/2026-02-04-watchtower-design.md) for detailed architecture and implementation details.
-
-## Testing
+Watchtower automatically prunes old job records. You can also run the prune command manually:
 
 ```bash
-composer test
+php artisan watchtower:prune
 ```
 
-## Changelog
+## How It Works
 
-Please see [CHANGELOG](CHANGELOG.md) for recent changes.
+### Polling-Based Control
 
-## Contributing
+Unlike Horizon which uses PCNTL signals (Unix-only), Watchtower uses Redis for worker control:
 
-Contributions are welcome! Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
+1. Dashboard sends command to Redis: `SET watchtower:worker:{id}:command "stop"`
+2. Worker checks Redis every 3 seconds
+3. Worker reads and executes the command
+4. Worker confirms status in database
 
-## Security
+This approach provides:
 
-If you discover any security issues, please email nathan@example.com instead of using the issue tracker.
+- ✅ Cross-platform compatibility
+- ✅ No PCNTL dependency
+- ✅ Simple debugging
+- ⚠️ 1-3 second response delay (acceptable for worker management)
 
-## Credits
+### Dashboard Updates
 
-- [Nathan Phelps](https://github.com/nathanphelps)
-- [All Contributors](../../contributors)
+The dashboard polls for updates every 3 seconds (configurable). This provides near-real-time visibility into:
+
+- Job counts and status
+- Worker health and activity
+- Throughput metrics
+
+## Artisan Commands
+
+| Command | Description |
+|---------|-------------|
+| `watchtower:supervisor` | Start the supervisor to manage workers |
+| `watchtower:worker {queue}` | Start a single worker process |
+| `watchtower:prune` | Prune old job records |
 
 ## License
 
-The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+MIT License. See [LICENSE.md](LICENSE.md) for details.
