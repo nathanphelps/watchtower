@@ -36,7 +36,7 @@ Technical overview of how Watchtower works under the hood.
 │                                                               │
 │  ┌──────────────┐                                            │
 │  │  Dashboard   │◀───polls (3s)────┐                        │
-│  │ (Inertia+Vue)│                   │                        │
+│  │(Blade+Alpine)│                   │                        │
 │  └──────────────┘                   │                        │
 │         │                     ┌──────┴───────┐               │
 │         └────sends commands──▶│ API          │               │
@@ -213,27 +213,31 @@ CREATE TABLE watchtower_workers (
 
 ## Dashboard Architecture
 
-### Inertia + Vue 3
+### Blade + Alpine.js
 
-The dashboard is a single-page application using:
+The dashboard uses standalone Blade templates with Alpine.js for reactivity:
 
-- **Inertia.js** - Server-side routing with client-side rendering
-- **Vue 3** - Reactive UI components
-- **Vite** - Asset bundling
+- **Blade Templates** - Server-rendered HTML (no build step)
+- **Alpine.js** - Lightweight reactivity (loaded from CDN)
+- **Inline CSS** - Self-contained styling with CSS variables
 
 ### Polling Mechanism
 
 ```javascript
-// Dashboard.vue
-onMounted(() => {
-    pollTimer = setInterval(async () => {
-        const response = await fetch('/watchtower/api/poll');
-        const data = await response.json();
-        stats.value = data.stats;
-        recentJobs.value = data.recentJobs;
-        workers.value = data.workers;
-    }, 3000);
-});
+// dashboard.blade.php (Alpine.js component)
+function dashboard() {
+    return {
+        stats: @json($initialData['stats']),
+        polling: true,
+        async poll() {
+            const response = await fetch('/watchtower/api/poll');
+            const data = await response.json();
+            this.stats = data.stats;
+            this.recentJobs = data.recentJobs;
+            this.workers = data.workers;
+        }
+    };
+}
 ```
 
 ### Route Structure
@@ -269,4 +273,5 @@ onMounted(() => {
 ### XSS Prevention
 
 - Job payloads displayed in `<pre>` tags
-- Vue's automatic escaping
+- Blade's automatic escaping
+- Alpine.js `x-text` directive (auto-escapes)

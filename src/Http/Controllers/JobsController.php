@@ -2,22 +2,21 @@
 
 namespace NathanPhelps\Watchtower\Http\Controllers;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Inertia\Inertia;
-use Inertia\Response;
+use Illuminate\View\View;
 use NathanPhelps\Watchtower\Models\Job;
 
 class JobsController extends Controller
 {
     /**
-     * Display a listing of jobs.
+     * Display listing of jobs.
      */
-    public function index(Request $request): Response
+    public function index(Request $request): View|JsonResponse
     {
-        $query = Job::query()->orderBy('queued_at', 'desc');
+        $query = Job::query();
 
-        // Apply filters
         if ($request->filled('status')) {
             $query->withStatus($request->input('status'));
         }
@@ -27,38 +26,42 @@ class JobsController extends Controller
         }
 
         if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('job_id', 'like', "%{$search}%")
-                    ->orWhereRaw("JSON_EXTRACT(payload, '$.displayName') LIKE ?", ["%{$search}%"]);
-            });
+            $query->where('payload', 'like', '%' . $request->input('search') . '%');
         }
 
-        $jobs = $query->paginate(50);
-
-        // Get unique queues for filter dropdown
+        $jobs = $query->orderBy('queued_at', 'desc')->paginate(50);
         $queues = Job::select('queue')->distinct()->pluck('queue');
 
-        return Inertia::render('watchtower::Jobs/Index', [
-            'jobs' => $jobs,
-            'queues' => $queues,
-            'filters' => [
-                'status' => $request->input('status'),
-                'queue' => $request->input('queue'),
-                'search' => $request->input('search'),
+        if ($request->wantsJson()) {
+            return response()->json([
+                'jobs' => $jobs,
+                'queues' => $queues,
+                'filters' => $request->only(['status', 'queue', 'search']),
+            ]);
+        }
+
+        return view('watchtower::jobs', [
+            'initialData' => [
+                'jobs' => $jobs,
+                'queues' => $queues,
+                'filters' => $request->only(['status', 'queue', 'search']),
             ],
         ]);
     }
 
     /**
-     * Display the specified job.
+     * Display job details.
      */
-    public function show(int $id): Response
+    public function show(int $id): View|JsonResponse
     {
         $job = Job::with('worker')->findOrFail($id);
 
-        return Inertia::render('watchtower::Jobs/Show', [
-            'job' => $job,
+        if (request()->wantsJson()) {
+            return response()->json(['job' => $job]);
+        }
+
+        return view('watchtower::job-detail', [
+            'initialData' => ['job' => $job],
         ]);
     }
 }

@@ -2,12 +2,12 @@
 
 namespace NathanPhelps\Watchtower\Http\Controllers;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Inertia\Inertia;
-use Inertia\Response;
-use NathanPhelps\Watchtower\Models\Worker;
+use Illuminate\View\View;
+use NathanPhelps\Watchtower\Models\Job;
 use NathanPhelps\Watchtower\Services\WorkerManager;
 
 class WorkersController extends Controller
@@ -17,71 +17,88 @@ class WorkersController extends Controller
     ) {}
 
     /**
-     * Display a listing of workers.
+     * Display worker management page.
      */
-    public function index(): Response
+    public function index(): View|JsonResponse
     {
-        return Inertia::render('watchtower::Workers', [
-            'workers' => $this->workerManager->getAllWorkers(),
-            'queues' => config('watchtower.supervisors.default.queue', ['default']),
+        $workers = $this->workerManager->getAllWorkers();
+        $queues = Job::select('queue')->distinct()->pluck('queue')->push('default')->unique()->values();
+
+        if (request()->wantsJson()) {
+            return response()->json([
+                'workers' => $workers,
+                'queues' => $queues,
+            ]);
+        }
+
+        return view('watchtower::workers', [
+            'initialData' => [
+                'workers' => $workers,
+                'queues' => $queues,
+            ],
         ]);
     }
 
     /**
      * Start a new worker.
      */
-    public function start(Request $request): RedirectResponse
+    public function start(Request $request): JsonResponse|RedirectResponse
     {
         $request->validate([
             'queue' => 'required|string',
         ]);
 
-        $supervisorConfig = config('watchtower.supervisors.default', []);
+        $workerId = $this->workerManager->startWorker($request->input('queue'));
 
-        $workerId = $this->workerManager->startWorker(
-            queue: $request->input('queue'),
-            options: [
-                'supervisor' => 'default',
-                'tries' => $supervisorConfig['tries'] ?? 3,
-                'timeout' => $supervisorConfig['timeout'] ?? 60,
-                'memory' => $supervisorConfig['memory'] ?? 128,
-                'sleep' => $supervisorConfig['sleep'] ?? 3,
-            ]
-        );
+        if ($request->wantsJson()) {
+            return response()->json([
+                'message' => 'Worker started',
+                'worker_id' => $workerId,
+            ]);
+        }
 
-        return back()->with('success', "Worker {$workerId} started successfully.");
+        return back()->with('success', 'Worker started');
     }
 
     /**
      * Stop a worker.
      */
-    public function stop(string $id): RedirectResponse
+    public function stop(string $workerId): JsonResponse|RedirectResponse
     {
-        $worker = Worker::where('worker_id', $id)->firstOrFail();
-        $this->workerManager->stopWorker($id);
+        $this->workerManager->stopWorker($workerId);
 
-        return back()->with('success', "Worker {$id} is stopping.");
+        if (request()->wantsJson()) {
+            return response()->json(['message' => 'Stop command sent']);
+        }
+
+        return back()->with('success', 'Worker stop command sent');
     }
 
     /**
      * Pause a worker.
      */
-    public function pause(string $id): RedirectResponse
+    public function pause(string $workerId): JsonResponse|RedirectResponse
     {
-        $worker = Worker::where('worker_id', $id)->firstOrFail();
-        $this->workerManager->pauseWorker($id);
+        $this->workerManager->pauseWorker($workerId);
 
-        return back()->with('success', "Worker {$id} is paused.");
+        if (request()->wantsJson()) {
+            return response()->json(['message' => 'Pause command sent']);
+        }
+
+        return back()->with('success', 'Worker pause command sent');
     }
 
     /**
-     * Resume a paused worker.
+     * Resume a worker.
      */
-    public function resume(string $id): RedirectResponse
+    public function resume(string $workerId): JsonResponse|RedirectResponse
     {
-        $worker = Worker::where('worker_id', $id)->firstOrFail();
-        $this->workerManager->resumeWorker($id);
+        $this->workerManager->resumeWorker($workerId);
 
-        return back()->with('success', "Worker {$id} is resuming.");
+        if (request()->wantsJson()) {
+            return response()->json(['message' => 'Resume command sent']);
+        }
+
+        return back()->with('success', 'Worker resume command sent');
     }
 }

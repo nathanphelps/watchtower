@@ -2,9 +2,9 @@
 
 namespace NathanPhelps\Watchtower\Http\Controllers;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
-use Inertia\Inertia;
-use Inertia\Response;
+use Illuminate\View\View;
 use NathanPhelps\Watchtower\Services\MetricsCollector;
 
 class MetricsController extends Controller
@@ -14,15 +14,23 @@ class MetricsController extends Controller
     ) {}
 
     /**
-     * Display the metrics dashboard.
+     * Display metrics dashboard.
      */
-    public function index(): Response
+    public function index(): View|JsonResponse
     {
-        return Inertia::render('watchtower::Metrics', [
+        $data = [
             'stats' => $this->metricsCollector->getStats(),
             'hourlyThroughput' => $this->metricsCollector->getHourlyThroughput(),
             'queueDepths' => $this->metricsCollector->getQueueDepths(),
             'averageDurations' => $this->metricsCollector->getAverageDurations(),
+        ];
+
+        if (request()->wantsJson()) {
+            return response()->json($data);
+        }
+
+        return view('watchtower::metrics', [
+            'initialData' => $data,
         ]);
     }
 }

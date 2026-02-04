@@ -10,7 +10,7 @@ Watchtower provides queue monitoring and worker management capabilities similar 
 - ⚙️ **Worker Management** - Start, stop, pause, resume workers from the web UI
 - 🖥️ **Cross-Platform** - Works on Windows, Linux, and macOS
 - 📋 **Job Tracking** - Job status, payload, exceptions, retries, worker info
-- 🎨 **Modern UI** - Inertia.js + Vue.js dark-themed SPA interface
+- 🎨 **Modern UI** - Alpine.js dark-themed dashboard (no build step required)
 - 🗑️ **Automatic Cleanup** - Time-based pruning of old job records
 
 ## Requirements
@@ -18,7 +18,6 @@ Watchtower provides queue monitoring and worker management capabilities similar 
 - PHP 8.2+
 - Laravel 11 or 12
 - Redis (for worker control commands)
-- Node.js 18+ (for building assets)
 
 ## Installation
 

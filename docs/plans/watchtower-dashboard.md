@@ -199,18 +199,6 @@ No page refresh needed - data updates automatically.
 
 ---
 
-## Keyboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| `1` | Go to Dashboard |
-| `2` | Go to Jobs |
-| `3` | Go to Failed Jobs |
-| `4` | Go to Workers |
-| `5` | Go to Metrics |
-
----
-
 ## Mobile Support
 
 The dashboard is fully responsive:

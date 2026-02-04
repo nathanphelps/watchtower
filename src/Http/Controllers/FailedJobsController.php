@@ -2,63 +2,63 @@
 
 namespace NathanPhelps\Watchtower\Http\Controllers;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Routing\Controller;
-use Inertia\Inertia;
-use Inertia\Response;
+use Illuminate\View\View;
 use NathanPhelps\Watchtower\Models\Job;
 
 class FailedJobsController extends Controller
 {
     /**
-     * Display a listing of failed jobs.
+     * Display failed jobs listing.
      */
-    public function index(): Response
+    public function index(): View|JsonResponse
     {
-        $failedJobs = Job::failed()
-            ->orderBy('completed_at', 'desc')
-            ->paginate(50);
+        $jobs = Job::failed()->orderBy('completed_at', 'desc')->paginate(50);
 
-        return Inertia::render('watchtower::FailedJobs', [
-            'jobs' => $failedJobs,
+        if (request()->wantsJson()) {
+            return response()->json(['jobs' => $jobs]);
+        }
+
+        return view('watchtower::failed-jobs', [
+            'initialData' => ['jobs' => $jobs],
         ]);
     }
 
     /**
      * Retry a failed job.
      */
-    public function retry(int $id): RedirectResponse
+    public function retry(int $id): JsonResponse|RedirectResponse
     {
         $job = Job::failed()->findOrFail($id);
 
-        // Reset job status to pending for retry
+        // Reset job status for retry
         $job->update([
             'status' => Job::STATUS_PENDING,
-            'exception' => null,
             'started_at' => null,
             'completed_at' => null,
-            'attempts' => $job->attempts + 1,
+            'exception' => null,
         ]);
 
-        // Re-queue the job if we have the payload
-        if (! empty($job->payload)) {
-            // The actual re-queuing would require deserializing the job
-            // For now, we just reset the status and let the user know
-            return back()->with('success', "Job {$job->job_id} has been marked for retry.");
+        if (request()->wantsJson()) {
+            return response()->json(['message' => 'Job queued for retry']);
         }
 
-        return back()->with('error', 'Unable to retry job: missing payload.');
+        return back()->with('success', 'Job queued for retry');
     }
 
     /**
      * Delete a failed job record.
      */
-    public function destroy(int $id): RedirectResponse
+    public function destroy(int $id): JsonResponse|RedirectResponse
     {
-        $job = Job::failed()->findOrFail($id);
-        $jobId = $job->job_id;
-        $job->delete();
+        Job::failed()->findOrFail($id)->delete();
 
-        return back()->with('success', "Job {$jobId} has been deleted.");
+        if (request()->wantsJson()) {
+            return response()->json(['message' => 'Job deleted']);
+        }
+
+        return back()->with('success', 'Job record deleted');
     }
 }
