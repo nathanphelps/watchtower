@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init)",
+      "Bash(git add docs/plans/2026-02-04-watchtower-design.md)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd Watchtower design document\n\nInitial design for cross-platform Laravel queue monitoring package.\nIncludes architecture, data models, worker control protocol, and\nimplementation plan.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(gh repo create nathanphelps/watchtower --public --description \"Cross-platform Laravel queue monitoring and worker management\" --source=. --remote=origin)",
+      "Bash(git push -u origin master)",
+      "Bash(composer search spatie skeleton)",
+      "Bash(composer show spatie/laravel-package-tools)",
+      "Bash(git add -A)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nComplete Phase 1: Core Infrastructure\n\nImplement foundational components for Watchtower package:\n\n- Set up Laravel package structure with proper namespacing\n- Add composer.json for Laravel 11/12 compatibility\n- Create configuration file with all settings\n- Implement database migrations for jobs and workers tables\n- Create Job and Worker Eloquent models with helpers\n- Implement JobMonitor service for queue event tracking\n- Create WatchtowerServiceProvider with event listeners\n- Add README, LICENSE, CHANGELOG, and .gitignore\n\nAll Phase 1 deliverables complete. Jobs are now tracked in database\nwhen dispatched. Ready for Phase 2: Worker Management.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+    ]
+  }
+}

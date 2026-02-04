@@ -1,0 +1,33 @@
+# Dependencies
+/vendor/
+node_modules/
+composer.lock
+package-lock.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.phpunit.result.cache
+coverage/
+.phpunit.cache
+
+# Build
+/public/hot
+/public/storage
+/storage/*.key
+npm-debug.log
+yarn-error.log
+
+# Environment
+.env
+.env.backup
+.env.production
