@@ -1,6 +1,10 @@
 # Watchtower
 
-**Cross-platform Laravel queue monitoring and worker management dashboard**
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/nathanphelps/watchtower.svg?style=flat-square)](https://packagist.org/packages/nathanphelps/watchtower)
+[![PHP Version](https://img.shields.io/packagist/php-v/nathanphelps/watchtower.svg?style=flat-square)](https://packagist.org/packages/nathanphelps/watchtower)
+[![License](https://img.shields.io/packagist/l/nathanphelps/watchtower.svg?style=flat-square)](LICENSE.md)
+
+> Cross-platform Laravel queue monitoring and worker management dashboard
 
 Watchtower provides queue monitoring and worker management capabilities similar to Laravel Horizon, but with full cross-platform support including Windows. Unlike Horizon, which relies on PCNTL signals (Unix-only), Watchtower uses a polling-based approach for worker control that works on Windows, Linux, and macOS.
 
@@ -149,3 +153,16 @@ The dashboard polls for updates every 3 seconds (configurable). This provides ne
 ## License
 
 MIT License. See [LICENSE.md](LICENSE.md) for details.
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+## Security
+
+If you discover a security vulnerability, please send an email instead of using the issue tracker. See [SECURITY.md](SECURITY.md) for details.
+
+## Credits
+
+- [Nathan Phelps](https://github.com/nathanphelps)
+- [All Contributors](../../contributors)

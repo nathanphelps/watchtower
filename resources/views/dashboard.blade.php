@@ -117,7 +117,7 @@ function dashboard() {
         async poll() {
             if (!this.polling) return;
             try {
-                const response = await fetch('{{ route("watchtower.dashboard.poll") }}', {
+                const response = await fetch('{{ route("watchtower.api.poll") }}', {
                     headers: { 'Accept': 'application/json' }
                 });
                 const data = await response.json();
