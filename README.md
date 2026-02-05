@@ -165,4 +165,5 @@ If you discover a security vulnerability, please send an email instead of using 
 ## Credits
 
 - [Nathan Phelps](https://github.com/nathanphelps)
+- [Claude Code](https://claude.ai) - AI pair programming assistant
 - [All Contributors](../../contributors)
