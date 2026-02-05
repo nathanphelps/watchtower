@@ -126,8 +126,8 @@ return [
             'queue' => env('WATCHTOWER_SUPERVISOR_QUEUE', '*'),
 
             // How to distribute workers across queues
-            // Options: 'simple' (all workers process all queues),
-            //          'auto' (automatically balance across queues)
+            // Options: 'simple' (each worker processes ALL queues - default, best for most cases),
+            //          'auto' (distribute workers across queues via round-robin - requires min_processes >= queue count)
             'balance' => env('WATCHTOWER_SUPERVISOR_BALANCE', 'simple'),
 
             // Minimum number of workers to maintain

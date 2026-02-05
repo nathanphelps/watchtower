@@ -103,7 +103,7 @@ class SupervisorCommand extends Command
             $this->info("Starting {$toStart} worker(s) to meet minimum");
 
             for ($i = 0; $i < $toStart; $i++) {
-                $queue = $this->getNextQueue($queues, $i);
+                $queue = $this->getNextQueue($queues, $i, $config['balance'] ?? 'simple');
                 $workerId = $workerManager->startWorker($queue, [
                     'supervisor' => $supervisorName,
                     'tries' => $config['tries'] ?? 3,
@@ -123,6 +123,7 @@ class SupervisorCommand extends Command
 
                 // Restart if we're below minimum
                 if ($runningWorkers->count() <= $minProcesses) {
+                    // Use the same queue assignment as the failed worker
                     $queue = $worker->queue;
                     $newWorkerId = $workerManager->startWorker($queue, [
                         'supervisor' => $supervisorName,
@@ -141,10 +142,21 @@ class SupervisorCommand extends Command
     }
 
     /**
-     * Get the next queue to assign a worker to (round-robin).
+     * Get the next queue to assign a worker to based on balance strategy.
+     *
+     * @param array $queues Available queues
+     * @param int $index Worker index for round-robin
+     * @param string $balance Balance strategy ('simple' or 'auto')
+     * @return string Queue name(s) - single queue for 'auto', comma-separated for 'simple'
      */
-    protected function getNextQueue(array $queues, int $index): string
+    protected function getNextQueue(array $queues, int $index, string $balance = 'simple'): string
     {
+        if ($balance === 'simple') {
+            // All workers process all queues (comma-separated for Laravel queue worker)
+            return implode(',', $queues);
+        }
+
+        // 'auto' mode: round-robin assignment (each worker gets one queue)
         return $queues[$index % count($queues)];
     }
 
