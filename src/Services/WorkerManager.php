@@ -29,10 +29,20 @@ class WorkerManager
         // Create and start the process
         $process = new Process($command, base_path());
         $process->setTimeout(null);
-        $process->start();
+        
+        // Start the process and capture any immediate errors
+        $process->start(function ($type, $buffer) use ($workerId) {
+            // Log any output from the worker process for debugging
+            if (Process::ERR === $type) {
+                \Log::error("Watchtower worker [{$workerId}] stderr: {$buffer}");
+            }
+        });
 
         // Store process reference
         $this->processes[$workerId] = $process;
+
+        // Wait a moment for process to actually start
+        usleep(100000); // 100ms
 
         // Record worker in database
         Worker::create([

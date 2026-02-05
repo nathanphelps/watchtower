@@ -99,20 +99,32 @@ class WorkerCommand extends Command
 
     /**
      * Register this worker in the database.
+     * Note: Worker record is created by WorkerManager, we just update it here.
      */
     protected function registerWorker(string $queue): void
     {
-        WorkerModel::updateOrCreate(
-            ['worker_id' => $this->workerId],
-            [
-                'supervisor' => 'default',
+        $worker = WorkerModel::where('worker_id', $this->workerId)->first();
+        
+        if ($worker) {
+            // Update existing record created by WorkerManager
+            $worker->update([
+                'pid' => getmypid(),
+                'status' => WorkerModel::STATUS_RUNNING,
+                'started_at' => now(),
+                'last_heartbeat' => now(),
+            ]);
+        } else {
+            // Create new record if worker was started manually (not via supervisor)
+            WorkerModel::create([
+                'worker_id' => $this->workerId,
+                'supervisor' => 'manual',
                 'queue' => $queue,
                 'pid' => getmypid(),
                 'status' => WorkerModel::STATUS_RUNNING,
                 'started_at' => now(),
                 'last_heartbeat' => now(),
-            ]
-        );
+            ]);
+        }
     }
 
     /**
