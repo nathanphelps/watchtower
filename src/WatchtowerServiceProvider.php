@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use NathanPhelps\Watchtower\Commands\PruneJobsCommand;
+use NathanPhelps\Watchtower\Commands\RestartCommand;
 use NathanPhelps\Watchtower\Commands\SupervisorCommand;
 use NathanPhelps\Watchtower\Commands\WorkerCommand;
 use NathanPhelps\Watchtower\Services\JobMonitor;
@@ -142,6 +143,7 @@ class WatchtowerServiceProvider extends ServiceProvider
                 WorkerCommand::class,
                 SupervisorCommand::class,
                 PruneJobsCommand::class,
+                RestartCommand::class,
             ]);
         }
     }

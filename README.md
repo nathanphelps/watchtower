@@ -101,6 +101,21 @@ Start a single worker manually:
 php artisan watchtower:worker default
 ```
 
+### Zero-Downtime Deployments
+
+Gracefully restart all workers after deploying new code:
+
+```bash
+php artisan watchtower:restart
+```
+
+Options:
+
+- `--queue=emails` - Only restart workers on a specific queue
+- `--force` - Force immediate restart (don't wait for current job)
+
+Workers will finish processing their current job, then restart with fresh code.
+
 ### Accessing the Dashboard
 
 Visit `/watchtower` in your browser. By default, the dashboard is only accessible in local environments. Configure the gate in your `AuthServiceProvider` for production:

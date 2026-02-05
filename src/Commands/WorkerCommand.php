@@ -168,6 +168,20 @@ class WorkerCommand extends Command
                     'status' => WorkerModel::STATUS_RUNNING,
                 ]);
                 break;
+
+            case 'restart':
+                $this->info('Received restart command - will stop after current job');
+                $this->shouldStop = true;
+                // Mark as restarting so supervisor knows to restart it
+                WorkerModel::where('worker_id', $this->workerId)->update([
+                    'status' => 'restarting',
+                ]);
+                break;
+
+            case 'terminate':
+                $this->info('Received terminate command - stopping immediately');
+                $this->shouldStop = true;
+                break;
         }
     }
 
